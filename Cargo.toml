@@ -1,0 +1,16 @@
+[package]
+name = "dissent"
+version = "0.1.0"
+authors = ["Cormac O'Brien <cormac@c-obrien.org>"]
+edition = "2018"
+
+description = "A flexible, zero-copy recursive descent parsing toolkit."
+license = "MIT"
+keywords = ["parsing"]
+categories = ["parsing"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bumpalo = "3"
+unicode-width = "0.1"
