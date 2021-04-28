@@ -58,14 +58,15 @@ where
 pub trait TokenSlice<'i, T>: AsRef<[Token<'i, T>]> {}
 impl<'i, T, S> TokenSlice<'i, T> for S where S: AsRef<[Token<'i, T>]> {}
 
-/// A macro for automatically generating "tag" tokens.
+/// A macro for automatically generating token recognizers for exact values.
 ///
 /// Each invocation of the macro generates a single function of the form
-/// `fn(&str) -> Option<Token<T>>`.
+/// `fn(&str) -> Option<Token<T>>`. The function will attempt to recognize each
+/// value in the order they are specified.
 ///
 /// ## Example
 /// ```rust
-/// # use dissent::{tag_tokens, Token, TokenType};
+/// # use dissent::{exact_tokens, Token, TokenType};
 /// // Simple token type that recognizes "a", "b", "c" and "d".
 /// #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 /// enum AbcdTokenType {
@@ -75,9 +76,9 @@ impl<'i, T, S> TokenSlice<'i, T> for S where S: AsRef<[Token<'i, T>]> {}
 /// }
 ///
 /// // Automatically generates the function:
-/// // `fn abcd_tag_tokens(input: &input) -> Option<Token<AbcdTokenType>> { ... }`
-/// tag_tokens! {
-///     abcd_tag_tokens -> AbcdTokenType {
+/// // `fn abcd_exact_tokens(input: &input) -> Option<Token<AbcdTokenType>> { ... }`
+/// exact_tokens! {
+///     abcd_exact_tokens -> AbcdTokenType {
 ///         "a" => A,
 ///         "b" => B,
 ///         "c" , "d" => Cd,
@@ -86,19 +87,19 @@ impl<'i, T, S> TokenSlice<'i, T> for S where S: AsRef<[Token<'i, T>]> {}
 ///
 /// impl TokenType for AbcdTokenType {
 ///     fn token(input: &str) -> Option<Token<Self>> {
-///         abcd_tag_tokens(input)
+///         abcd_exact_tokens(input)
 ///     }
 /// }
 ///
 /// # fn main() {
-/// assert_eq!(abcd_tag_tokens("a"), Token::new(AbcdTokenType::A, "a"));
-/// assert_eq!(abcd_tag_tokens("b"), Token::new(AbcdTokenType::B, "b"));
-/// assert_eq!(abcd_tag_tokens("c"), Token::new(AbcdTokenType::Cd, "c"));
-/// assert_eq!(abcd_tag_tokens("d"), Token::new(AbcdTokenType::Cd, "d"));
+/// assert_eq!(abcd_exact_tokens("a"), Token::new(AbcdTokenType::A, "a"));
+/// assert_eq!(abcd_exact_tokens("b"), Token::new(AbcdTokenType::B, "b"));
+/// assert_eq!(abcd_exact_tokens("c"), Token::new(AbcdTokenType::Cd, "c"));
+/// assert_eq!(abcd_exact_tokens("d"), Token::new(AbcdTokenType::Cd, "d"));
 /// # }
 /// ```
 #[macro_export]
-macro_rules! tag_tokens {
+macro_rules! exact_tokens {
     (
         $v:vis $rule:ident -> $ttype:ty {
             $( $val:expr $( , $vals:expr)* => $variant:ident ),* $(,)?
@@ -129,7 +130,7 @@ macro_rules! tag_tokens {
 /// pattern which does not already start with "\A" will have that prefix added
 /// when the regex is compiled.
 ///
-/// The regex is compiled at most once, when the branch is first evaluated.
+/// Each regex is compiled at most once, when its branch is first evaluated.
 ///
 /// ## Example
 /// ```rust
@@ -227,7 +228,7 @@ mod tests {
     mod module {
         use super::*;
 
-        tag_tokens! {
+        exact_tokens! {
             pub public -> TokTy {
                 "*" => Star,
             }
@@ -248,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tag_tokens_impl() {
+    fn test_exact_tokens_impl() {
         assert_eq!(TokTy::token("!"), Token::new(TokTy::Bang, "!"));
         assert_eq!(TokTy::token("*"), Token::new(TokTy::Star, "*"));
         assert_eq!(TokTy::token("'"), Token::new(TokTy::Tick, "'"));

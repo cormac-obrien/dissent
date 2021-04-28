@@ -2,7 +2,7 @@ use std::{error::Error, fmt, marker::PhantomData};
 
 use bumpalo::Bump;
 use dissent::{
-    bt, tag_tokens, ConsList, Parse, Token, TokenSlice, TokenStream, TokenStreamError, TokenType,
+    bt, exact_tokens, ConsList, Parse, Token, TokenSlice, TokenStream, TokenStreamError, TokenType,
     Tokenize,
 };
 
@@ -21,8 +21,8 @@ pub enum JsonTokenType {
     Null,
 }
 
-tag_tokens! {
-    json_tags -> JsonTokenType {
+exact_tokens! {
+    json_exact -> JsonTokenType {
         "{" => LBrace,
         "}" => RBrace,
         "[" => LBracket,
@@ -134,7 +134,7 @@ dissent::regex_tokens! {
 
 impl TokenType for JsonTokenType {
     fn token(input: &str) -> Option<Token<JsonTokenType>> {
-        json_tags(input)
+        json_exact(input)
             .or_else(|| whitespace(input))
             .or_else(|| string(input))
             .or_else(|| number(input))
