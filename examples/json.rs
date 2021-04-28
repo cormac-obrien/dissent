@@ -112,56 +112,24 @@ fn string(input: &str) -> Option<Token<JsonTokenType>> {
     }
 }
 
+#[cfg(not(feature = "regex"))]
 fn number(input: &str) -> Option<Token<JsonTokenType>> {
-    let mut it = input.chars().peekable();
-    let mut matched = 0;
+    compile_error!("This example requires the \"regex\" feature.");
+    None
+}
 
-    if let Some('-') = it.peek() {
-        matched += '-'.len_utf8();
-        it.next();
+#[cfg(feature = "regex")]
+dissent::regex_tokens! {
+    number -> JsonTokenType {
+        // In order:
+        // - An optional leading '-'.
+        // - Either a single '0', or a nonzero digit followed by zero or more
+        //   digits.
+        // - Optionally, a '.' followed by one or more digits.
+        // - Optionally, either 'E' or 'e', then an optional '+' or '-',
+        //   followed by one or more digits.
+        r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[Ee][+-]?[0-9]+)?" => Number,
     }
-
-    match it.next() {
-        Some(c @ '1'..='9') => {
-            matched += c.len_utf8();
-            while let Some(c @ '0'..='9') = it.peek() {
-                matched += c.len_utf8();
-                it.next();
-            }
-        }
-        Some('0') => matched += '0'.len_utf8(),
-        _ => return None,
-    }
-
-    if let Some('.') = it.peek() {
-        matched += '.'.len_utf8();
-        it.next();
-        while let Some(c @ '0'..='9') = it.peek() {
-            matched += c.len_utf8();
-            it.next();
-        }
-    }
-
-    if let Some(c) = it.peek() {
-        if *c == 'e' || *c == 'E' {
-            matched += c.len_utf8();
-            it.next();
-
-            if let Some(c) = it.peek() {
-                if *c == '+' || *c == '-' {
-                    matched += c.len_utf8();
-                    it.next();
-                }
-
-                while let Some(c @ '0'..='9') = it.peek() {
-                    matched += c.len_utf8();
-                    it.next();
-                }
-            }
-        }
-    }
-
-    Token::new(JsonTokenType::Number, &input[..matched])
 }
 
 impl TokenType for JsonTokenType {
@@ -176,6 +144,7 @@ impl TokenType for JsonTokenType {
 #[derive(Clone, Debug)]
 pub enum JsonError<'i> {
     TokenStream(TokenStreamError<'i, JsonTokenType>),
+    MemberExpectedValue { key: &'i str },
     ExpectedValue,
 }
 
@@ -183,6 +152,13 @@ impl<'i> fmt::Display for JsonError<'i> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             JsonError::TokenStream(e) => write!(f, "{}", e),
+            JsonError::MemberExpectedValue { key } => {
+                write!(
+                    f,
+                    "while parsing object member with key {}: expected a value",
+                    key
+                )
+            }
             JsonError::ExpectedValue => write!(f, "expected a value"),
         }
     }
@@ -369,7 +345,7 @@ where
 
         let value = tokens
             .parse::<SkipWs<Value>>(bump)?
-            .ok_or(JsonError::ExpectedValue)?;
+            .ok_or(JsonError::MemberExpectedValue { key })?;
 
         Ok(Some(Member { key, value }))
     }

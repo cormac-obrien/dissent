@@ -60,7 +60,8 @@ impl<'i, T, S> TokenSlice<'i, T> for S where S: AsRef<[Token<'i, T>]> {}
 
 /// A macro for automatically generating "tag" tokens.
 ///
-/// The resulting function is of the form `fn(&str) -> Option<Token<T>>`.
+/// Each invocation of the macro generates a single function of the form
+/// `fn(&str) -> Option<Token<T>>`.
 ///
 /// ## Example
 /// ```rust
@@ -119,6 +120,80 @@ macro_rules! tag_tokens {
     }
 }
 
+/// A macro for automatically generating tokens based on a regular expression.
+///
+/// Each invocation of the macro generates a single function of the form
+/// `fn(&str) -> Option<Token<T>>`.
+///
+/// The resulting function will only match at the start of the input; any
+/// pattern which does not already start with "\A" will have that prefix added
+/// when the regex is compiled.
+///
+/// The regex is compiled at most once, when the branch is first evaluated.
+///
+/// ## Example
+/// ```rust
+/// # use dissent::{regex_tokens, Token, TokenType};
+/// // A token type that recognizes words and whitespace.
+/// #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// enum ExampleTokenType {
+///     Word,
+///     Whitespace,
+/// }
+///
+/// regex_tokens! {
+///     example_regex -> ExampleTokenType {
+///         // Match one or more letters
+///         r"[A-Za-z]+" => Word,
+///
+///         // Match one or more spaces or tabs
+///         r"[ \t]+" => Whitespace,
+///     }
+/// }
+///
+/// impl TokenType for ExampleTokenType {
+///     fn token(input: &str) -> Option<Token<Self>> {
+///         example_regex(input)
+///     }
+/// }
+///
+/// # fn main() {
+/// assert_eq!(example_regex("some words"), Token::new(ExampleTokenType::Word, "some"));
+/// assert_eq!(example_regex("  whitespace"), Token::new(ExampleTokenType::Whitespace, "  "));
+/// assert_eq!(example_regex("42"), None);
+/// # }
+/// ```
+#[cfg(feature = "regex")]
+#[macro_export]
+macro_rules! regex_tokens {
+    (
+        $v:vis $name:ident -> $tty:ty {
+            $( $pattern:literal => $variant:ident ),*
+            $(,)?
+        }
+    ) => {
+        $v fn $name(input: &str) -> Option<$crate::Token<$tty>> {
+            $(
+                if let Some(m) = {
+                    lazy_static::lazy_static! {
+                        static ref REGEX: regex::Regex = if $pattern.starts_with(r"\A") {
+                            regex::Regex::new($pattern).unwrap()
+                        } else {
+                            regex::Regex::new(concat!(r"\A", $pattern)).unwrap()
+                        };
+                    }
+
+                    REGEX.find(input)
+                } {
+                    $crate::Token::new(<$tty>::$variant, &input[..m.end()])
+                } else
+            )* {
+                None
+            }
+        }
+    };
+}
+
 const EST_BYTES_PER_TOKEN: usize = 8;
 
 pub(crate) fn tokenize<T>(input: &str) -> Vec<Token<T>>
@@ -148,29 +223,34 @@ mod tests {
         Tick,
     }
 
-    // Make sure `pub` in `tag_tokens` works.
+    // Make sure `pub` works in token macros.
     mod module {
         use super::*;
 
         tag_tokens! {
             pub public -> TokTy {
-                "!" => Bang,
                 "*" => Star,
-                "'" => Tick,
+            }
+        }
+
+        regex_tokens! {
+            pub re_public -> TokTy {
+                r"!" => Bang,
+                r"'" => Tick,
             }
         }
     }
 
     impl TokenType for TokTy {
         fn token(input: &str) -> Option<Token<TokTy>> {
-            module::public(input)
+            module::public(input).or_else(|| module::re_public(input))
         }
     }
 
     #[test]
     fn test_tag_tokens_impl() {
-        assert_eq!(module::public("!"), Token::new(TokTy::Bang, "!"));
-        assert_eq!(module::public("*"), Token::new(TokTy::Star, "*"));
-        assert_eq!(module::public("'"), Token::new(TokTy::Tick, "'"));
+        assert_eq!(TokTy::token("!"), Token::new(TokTy::Bang, "!"));
+        assert_eq!(TokTy::token("*"), Token::new(TokTy::Star, "*"));
+        assert_eq!(TokTy::token("'"), Token::new(TokTy::Tick, "'"));
     }
 }
